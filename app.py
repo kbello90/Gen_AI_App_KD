@@ -15,7 +15,8 @@ from langchain_ibm import WatsonxLLM, WatsonxEmbeddings
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import Chroma
 from langchain_community.document_loaders import PyPDFLoader
-from langchain.chains import RetrievalQA
+from langchain_community.chains import RetrievalQA
+
 
 # ---------------------------------------------------------
 # Setup
