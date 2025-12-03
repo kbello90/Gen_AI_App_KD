@@ -7,4 +7,5 @@ chromadb
 pypdf
 python-dotenv
 ibm-watsonx-ai
+langchain-text-splitters
 
