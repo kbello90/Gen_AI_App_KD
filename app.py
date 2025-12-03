@@ -12,29 +12,27 @@ from dotenv import load_dotenv
 from ibm_watsonx_ai.metanames import GenTextParamsMetaNames as GenParams
 from ibm_watsonx_ai.metanames import EmbedTextParamsMetaNames
 from langchain_ibm import WatsonxLLM, WatsonxEmbeddings
+
+# LangChain RAG (New API)
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import Chroma
 from langchain_community.document_loaders import PyPDFLoader
-from langchain.chains.retrieval import RetrievalQA  
 
+from langchain.chains import create_retrieval_chain
+from langchain.chains.combine_documents import create_stuff_documents_chain
+from langchain_core.prompts import ChatPromptTemplate
 
 # ---------------------------------------------------------
 # Setup
 # ---------------------------------------------------------
 
 warnings.filterwarnings("ignore")
-
-# Load .env so WATSONX_* vars are available in os.environ
-load_dotenv()
+load_dotenv()  # Load .env for Streamlit Cloud
 
 
 def get_watsonx_config():
     """
     Read watsonx config from environment variables or Streamlit secrets.
-    You must define:
-      WATSONX_APIKEY
-      WATSONX_URL
-      WATSONX_PROJECT_ID
     """
     api_key = (
         os.environ.get("WATSONX_APIKEY")
@@ -51,9 +49,9 @@ def get_watsonx_config():
 
     if api_key is None or project_id is None:
         st.error(
-            "Watsonx credentials not configured.\n\n"
+            "❌ Watsonx credentials missing.\n\n"
             "Please set WATSONX_APIKEY and WATSONX_PROJECT_ID "
-            "in your .env file or Streamlit secrets."
+            "in Streamlit Secrets or your .env file."
         )
         st.stop()
 
@@ -66,8 +64,7 @@ def get_watsonx_config():
 
 def document_loader(file_path: str):
     loader = PyPDFLoader(file_path)
-    loaded_document = loader.load()
-    return loaded_document
+    return loader.load()
 
 
 # ---------------------------------------------------------
@@ -78,14 +75,13 @@ def text_splitter(data):
     splitter = RecursiveCharacterTextSplitter(
         chunk_size=1000,
         chunk_overlap=100,
-        length_function=len,
+        length_function=len
     )
-    chunks = splitter.split_documents(data)
-    return chunks
+    return splitter.split_documents(data)
 
 
 # ---------------------------------------------------------
-# Task 3: Embedding Model
+# Task 3: Embeddings
 # ---------------------------------------------------------
 
 def watsonx_embedding(url: str, project_id: str):
@@ -93,13 +89,13 @@ def watsonx_embedding(url: str, project_id: str):
         EmbedTextParamsMetaNames.TRUNCATE_INPUT_TOKENS: 3,
         EmbedTextParamsMetaNames.RETURN_OPTIONS: {"input_text": True},
     }
-    embedding_model = WatsonxEmbeddings(
+
+    return WatsonxEmbeddings(
         model_id="ibm/slate-125m-english-rtrvr-v2",
         url=url,
         project_id=project_id,
         params=embed_params,
     )
-    return embedding_model
 
 
 # ---------------------------------------------------------
@@ -108,62 +104,56 @@ def watsonx_embedding(url: str, project_id: str):
 
 def vector_database(chunks, url: str, project_id: str):
     embedding_model = watsonx_embedding(url, project_id)
-    vectordb = Chroma.from_documents(chunks, embedding_model)
-    return vectordb
+    return Chroma.from_documents(chunks, embedding_model)
 
 
 # ---------------------------------------------------------
-# Task 5: Retriever
+# Task 5: Build Retriever
 # ---------------------------------------------------------
 
 def build_retriever(file_path: str, url: str, project_id: str):
-    splits = document_loader(file_path)
-    chunks = text_splitter(splits)
+    docs = document_loader(file_path)
+    chunks = text_splitter(docs)
     vectordb = vector_database(chunks, url, project_id)
-    retriever_obj = vectordb.as_retriever()
-    return retriever_obj
+    return vectordb.as_retriever()
 
 
 # ---------------------------------------------------------
-# LLM Setup (Granite 3.3 8B — same as your lab app)
+# LLM Setup (Granite 3.3 8B)
 # ---------------------------------------------------------
 
 def get_llm(url: str, project_id: str):
-    model_id = "ibm/granite-3-3-8b-instruct"
-    parameters = {
+    params = {
         GenParams.MAX_NEW_TOKENS: 256,
         GenParams.TEMPERATURE: 0.5,
     }
-    watsonx_llm = WatsonxLLM(
-        model_id=model_id,
+    return WatsonxLLM(
+        model_id="ibm/granite-3-3-8b-instruct",
         url=url,
         project_id=project_id,
-        params=parameters,
+        params=params,
     )
-    return watsonx_llm
 
 
 # ---------------------------------------------------------
-# Task 6: QA Bot Logic
+# Task 6: New RAG Pipeline (NO MORE RetrievalQA)
 # ---------------------------------------------------------
 
-def retriever_qa(file_path: str, query: str, url: str, project_id: str) -> str:
+def retriever_qa(file_path: str, query: str, url: str, project_id: str):
     llm = get_llm(url, project_id)
-    retriever_obj = build_retriever(file_path, url, project_id)
+    retriever = build_retriever(file_path, url, project_id)
 
-    qa = RetrievalQA.from_chain_type(
-        llm=llm,
-        chain_type="stuff",
-        retriever=retriever_obj,
-        return_source_documents=False,
+    prompt = ChatPromptTemplate.from_template(
+        "Use the following context to answer the question.\n\n"
+        "Context:\n{context}\n\n"
+        "Question: {input}"
     )
 
-    response = qa.invoke(query)
+    document_chain = create_stuff_documents_chain(llm, prompt)
+    rag_chain = create_retrieval_chain(retriever, document_chain)
 
-    # In newer LangChain versions, invoke may return a dict with "result"
-    if isinstance(response, dict) and "result" in response:
-        return response["result"]
-    return str(response)
+    result = rag_chain.invoke({"input": query})
+    return result["answer"]
 
 
 # ---------------------------------------------------------
@@ -176,31 +166,22 @@ def main():
         layout="wide",
     )
 
-    st.title("🧪 Quest Analytics RAG Assistant by Karen Delea")
+    st.title("🧪 Quest Analytics RAG Assistant - by Karen Delea")
     st.write(
-        "Upload a scientific paper in PDF format and ask questions about it.\n\n"
-        "This assistant uses **IBM watsonx LLMs**, **LangChain**, and **Chroma** "
-        "for Retrieval-Augmented Generation (RAG)."
+        "Upload a scientific paper (PDF), ask questions, and the system will "
+        "answer using **RAG with IBM watsonx.ai**."
     )
 
+    # Load Watsonx credentials
     url, project_id = get_watsonx_config()
 
-    st.sidebar.header("🔧 Model Configuration")
-    st.sidebar.write("**LLM:** ibm/granite-3-3-8b-instruct")
-    st.sidebar.write("**Embeddings:** ibm/slate-125m-english-rtrvr-v2")
-
-    uploaded_file = st.file_uploader(
-        "Upload a scientific paper (PDF)",
-        type=["pdf"],
-    )
-
-    query = st.text_area(
-        "Ask a question about the document",
-        placeholder="e.g., What is the main contribution of this paper?",
+    uploaded_file = st.file_uploader("Upload PDF", type=["pdf"])
+    query = st.text_input(
+        "Ask a question about the PDF",
+        placeholder="Example: What is the main contribution of this study?"
     )
 
     if st.button("Ask"):
-
         if uploaded_file is None:
             st.warning("Please upload a PDF first.")
             st.stop()
@@ -209,18 +190,16 @@ def main():
             st.warning("Please enter a question.")
             st.stop()
 
-        # Save uploaded PDF to a temporary file so PyPDFLoader can read it
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp_file:
-            tmp_file.write(uploaded_file.read())
-            tmp_path = tmp_file.name
+        # Save PDF for processing
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
+            tmp.write(uploaded_file.read())
+            pdf_path = tmp.name
 
-        with st.spinner(
-            "Reading document, building vector store, and querying the model..."
-        ):
+        with st.spinner("Processing document, creating embeddings, and querying the LLM..."):
             try:
-                answer = retriever_qa(tmp_path, query, url, project_id)
+                answer = retriever_qa(pdf_path, query, url, project_id)
             except Exception as e:
-                st.error(f"Error while processing the document: {e}")
+                st.error(f"⚠️ Error: {e}")
                 return
 
         st.subheader("🧠 Answer")
@@ -233,3 +212,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
