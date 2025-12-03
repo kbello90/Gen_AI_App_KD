@@ -1,11 +1,11 @@
-streamlit
-langchain==0.1.20
-langchain-community==0.0.40
-langchain-core==0.1.52
-langchain-ibm
-chromadb
-pypdf
-python-dotenv
-ibm-watsonx-ai
+streamlit==1.39.0
+python-dotenv==1.0.1
+ibm-watsonx-ai==1.1.0
+langchain==0.3.7
+langchain-community==0.3.7
+langchain-ibm==0.1.4
+langchain-text-splitters==0.3.2
+chromadb==0.5.3
+huggingface-hub==0.24.6
 
 
