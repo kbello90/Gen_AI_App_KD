@@ -1,0 +1,9 @@
+streamlit
+ibm-watsonx-ai
+langchain
+langchain-ibm
+langchain-community
+langchain-text-splitters
+chromadb
+pypdf
+tiktoken

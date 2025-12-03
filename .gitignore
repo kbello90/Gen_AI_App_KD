@@ -1,0 +1,50 @@
+# ============================================
+#  Quest Analytics RAG Assistant - .gitignore
+#  Protects API keys, temporary files, cache,
+#  virtual environments, and system artifacts.
+# ============================================
+
+# --- Environment Variables ---
+.env
+*.env
+
+# --- Virtual Environments ---
+venv/
+env/
+.my_env/
+.venv/
+*.egg-info/
+
+# --- Python Cache ---
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.pkl
+
+# --- Streamlit Cache ---
+.streamlit/
+logs/
+cache/
+
+# --- Temp Files ---
+*.tmp
+*.log
+*.DS_Store
+Thumbs.db
+
+# --- Uploaded PDFs (don’t commit user data) ---
+uploaded_files/
+*.pdf
+
+# --- Jupyter / VSCode ---
+.ipynb_checkpoints/
+.vscode/
+
+# --- Build / packaged files ---
+dist/
+build/
+*.spec
+
+# --- OS Specific ---
+.DS_Store
